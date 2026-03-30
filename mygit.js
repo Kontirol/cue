@@ -47,7 +47,15 @@ function add(file) {
             const dir = process.cwd()
             traverseDir(dir)
         } else {
-            calcHash(file)
+            const thisfile = path.join(process.cwd(),file);
+            if(fs.statSync(thisfile).isDirectory()){
+                traverseDir(thisfile)
+            }else{
+                calcHash(thisfile)
+            }
+            
+            return;
+            // traverseDir(path.join(process.cwd(),file))
         }
     } else {
         console.log("文件不存在");
