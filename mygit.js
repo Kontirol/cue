@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const process = require("process");
 const crypto = require("crypto");
+const { blob } = require("stream/consumers");
 
 // const GIT_DIR = 
 const GIT_DIR = path.join(process.cwd(), '.mygit');
@@ -31,11 +32,11 @@ function init() {
     if (fs.existsSync(GIT_DIR)) {
         console.log("文件存在");
     } else {
-        console.log("文件不存在");
         fs.mkdirSync(GIT_DIR, { recursive: true })
         fs.mkdirSync(OBJECTS_DIR, { recursive: true })
         fs.mkdirSync(REFS_DIR, { recursive: true })
         fs.writeFileSync(HEAD_FILE, "")
+        console.log("仓库初始化成功");
     }
 }
 
@@ -65,7 +66,7 @@ function add(file) {
 //递归遍历
 function traverseDir(dir) {
     const entries = fs.readdirSync(dir);
-    
+    console.log(entries);
     entries.forEach(entry=>{
         const fullPath = path.join(dir,entry)
         console.log(fullPath);
@@ -74,7 +75,7 @@ function traverseDir(dir) {
          }else if(fs.statSync(fullPath).isDirectory()){
             console.log("是");
             
-            if(entry === '.mygit') return;
+            if(entry === '.mygit' || entry===".git") return;
 
             traverseDir(fullPath)
          }
@@ -162,70 +163,47 @@ function checkout() {
   const commitHash = argv[3];    // 版本号
   const targetName = argv[4];    // 要恢复的 文件 / 文件夹
 
-  // 2. 检查参数是否齐全
-  if (!commitHash || !targetName) {
-    console.log("用法：node mygit.js checkout 版本号 文件/文件夹名");
-    return;
-  }
+  // 获取版本信息
 
-  // 3. 读取commit对象
-  const commitPath = path.join(OBJECTS_DIR, commitHash);
-  if (!fs.existsSync(commitPath)) {
-    console.log("版本不存在！");
-    return;
-  }
-  const commitContent = fs.readFileSync(commitPath, "utf8");
-  const commitData = JSON.parse(commitContent);
-  const commitFiles = commitData.files;
 
-  // 4. 判断用户输入的是 文件 还是 文件夹
-  let isFile = false;
-  let isDir = false;
-
-  // 判断是不是文件
-  if (commitFiles.hasOwnProperty(targetName)) {
-    isFile = true;
-  }
-
-  // 判断是不是文件夹
-  for (const filePath in commitFiles) {
-    if (filePath.startsWith(targetName + "/")) {
-      isDir = true;
-      break;
+  const commitblob =JSON.parse(fs.readFileSync(path.join(OBJECTS_DIR,commitHash)).toString())
+//   console.log(Object.keys(commitblob.files));
+//   console.log(commitblob.files[targetName]);
+    if(fs.statSync(targetName).isFile()){
+        const hashblob = path.join(OBJECTS_DIR,commitblob.files[targetName])
+        restoreFile(hashblob,commitblob.files)
+        console.log("回滚成功");
+    }else{
+        files(targetName,commitblob.files)
     }
-  }
+}
 
-  // 5. 开始执行恢复
-  if (isFile) {
-    console.log("正在恢复文件：" + targetName);
-    restoreFile(targetName, commitFiles[targetName]);
-  } else if (isDir) {
-    console.log("正在恢复文件夹：" + targetName);
-    // 遍历所有文件，批量恢复
-    for (const filePath in commitFiles) {
-      if (filePath.startsWith(targetName + "/")) {
-        restoreFile(filePath, commitFiles[filePath]);
-      }
-    }
-  } else {
-    console.log("错误：版本中没有这个文件或文件夹");
-  }
+function files(dir,filelist) {
+    
+    const entries  = fs.readdirSync(dir)
+    
+    entries.forEach(entry=>{
+            const fullPath = path.join(dir,entry)
+            
+            if(fs.statSync(fullPath).isFile()){           
+                restoreFile(fullPath,filelist[fullPath])                
+            }else if(fs.statSync(fullPath).isDirectory()){
+                files(fullPath,filelist)
+            }
+        })
 }
 
 // 【通用工具函数】单独恢复一个文件（自动创建文件夹）
-function restoreFile(filePath, blobHash) {
-  // 读取文件内容
-  const blobPath = path.join(OBJECTS_DIR, blobHash);
-  const content = fs.readFileSync(blobPath); // 读取二进制内容
-
-  // 获取文件所在文件夹
-  const dirPath = path.dirname(filePath);
-
-  // 文件夹不存在 → 创建
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-
-  // 写入文件（覆盖）
-  fs.writeFileSync(filePath, content);
+function restoreFile(filepath,blobHash) {
+    // console.log("文件："+filePath + "\n hash："+blobHash);
+    if(blobHash === undefined || blobHash === null){
+        // console.log("没有此文件");
+        
+    }else{
+        const blobdata = fs.readFileSync(path.join(OBJECTS_DIR,blobHash)).toString()
+        fs.writeFileSync(filepath,blobdata)
+    }
+    
+    
+    
 }
