@@ -30,7 +30,14 @@ switch (argv[2]) {
     case "branch":
         branch()
         break;
+    case "merge":
+        merge()
+        break;
+    case "-h":
+        help()
+        break;
     default:
+        help()
         break;
 }
 
@@ -248,4 +255,29 @@ function branch() {
         }
     }
 
+}
+
+
+function help() {
+    console.log(`
+        cue 工具
+        所有命令：
+        cue init -------------------------------- 初始化仓库
+        cue add file/. --------------------------- 添加文件或所有文件
+        cue commit "message" ------------------- 提交
+        cue commit log ------------------------- 查看提交日记
+        cue checkout {commit} file/dir ------------- 回滚文件/文件夹
+        cue branch {name} ---------------------  创建分支
+        cue brach check {name} ----------------- 切换分支
+        cue merge {name} ---------------------- 合并分支
+        `);
+}
+
+// merge 合并
+function merge() {
+    const currentrefs = path.join(GIT_DIR,fs.readFileSync(HEAD_FILE).toString().split(': ')[1])
+    const targetrefs = path.join(REFS_DIR,"/heads/"+argv[3])
+    const targetrefshash = fs.readFileSync(targetrefs).toString()
+    fs.writeFileSync(currentrefs,targetrefshash)
+    
 }
