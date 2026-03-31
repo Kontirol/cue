@@ -23,6 +23,13 @@ switch (argv[2]) {
         break;
     case "checkout":
         checkout()
+        break;
+    case "status":
+        status()
+        break;
+    case "branch":
+        branch()
+        break;
     default:
         break;
 }
@@ -34,8 +41,9 @@ function init() {
     } else {
         fs.mkdirSync(GIT_DIR, { recursive: true })
         fs.mkdirSync(OBJECTS_DIR, { recursive: true })
-        fs.mkdirSync(REFS_DIR, { recursive: true })
-        fs.writeFileSync(HEAD_FILE, "")
+        fs.mkdirSync(REFS_DIR+"/heads/", { recursive: true })
+        fs.writeFileSync(REFS_DIR+"/heads/main","")
+        fs.writeFileSync(HEAD_FILE, "ref: refs/heads/main")
         console.log("仓库初始化成功");
     }
 }
@@ -106,11 +114,12 @@ function commit() {
             filemap[item.split(' ')[0]] = item.split(' ')[1]
         })
         const HEAD = fs.readFileSync(HEAD_FILE).toString()
+        const refshead = fs.readFileSync(path.join(GIT_DIR,HEAD.split(': ')[1])).toString()
         let parent
-        if(HEAD.length === 0){
+        if(refshead.length === 0){
             parent = null
         }else{
-            parent = HEAD
+            parent = refshead
         }
         
         let object
@@ -124,7 +133,7 @@ function commit() {
         const hashvalue = crypto.createHash('sha1').update(str).digest('hex')
         fs.writeFileSync(OBJECTS_DIR + '/' + hashvalue, str)
         fs.writeFileSync(GIT_DIR + '/index', "")
-        fs.writeFileSync(HEAD_FILE, hashvalue)
+        fs.writeFileSync(path.join(GIT_DIR,HEAD.split(': ')[1]), hashvalue)
     }else{
         log()
     }
@@ -133,11 +142,12 @@ function commit() {
 // log 操作
 function log() {
     const HEAD = fs.readFileSync(HEAD_FILE).toString()
-    if(HEAD.length === 0){
+    const refshead = fs.readFileSync(path.join(GIT_DIR,HEAD.split(': ')[1])).toString()
+    
+    if(refshead.length === 0){
         console.log("暂无提交");
-        return
     }
-    let currentHash = HEAD
+    let currentHash = refshead
     let commit = []
 
     while(currentHash !== null){
@@ -203,7 +213,39 @@ function restoreFile(filepath,blobHash) {
         const blobdata = fs.readFileSync(path.join(OBJECTS_DIR,blobHash)).toString()
         fs.writeFileSync(filepath,blobdata)
     }
+}
+
+
+
+// status
+function status() {
+    const HEAD = fs.readFileSync(HEAD_FILE).toString()
+    console.log("当前分支："+HEAD);
     
-    
-    
+}
+
+// brach
+function branch() {
+    console.log("branch分支");
+    if (argv[3]) {
+        //  切换
+        if (argv[3] === "check") {
+            if (fs.existsSync(path.join(REFS_DIR, '/heads/' + argv[4]))) {
+                fs.writeFileSync(HEAD_FILE, "ref: refs/heads/" + argv[4])
+                console.log("切换到"+argv[4]+"分支");
+                
+            }
+        } else {
+            const HEAD = fs.readFileSync(HEAD_FILE).toString()
+            const newcommit = fs.readFileSync(path.join(GIT_DIR,HEAD.split(': ')[1])).toString()
+            const branchfile = REFS_DIR + "/heads/" + argv[3];
+            if (fs.existsSync(branchfile)) {
+                console.log("分支已存在");
+            } else {
+                fs.writeFileSync(branchfile, newcommit)
+                console.log("分支" + argv[3] + "创建成功");
+            }
+        }
+    }
+
 }
