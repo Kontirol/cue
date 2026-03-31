@@ -38,6 +38,7 @@ switch (argv[2]) {
         break;
     default:
         help()
+        getIgnoreList()
         break;
 }
 
@@ -81,17 +82,15 @@ function add(file) {
 //递归遍历
 function traverseDir(dir) {
     const entries = fs.readdirSync(dir);
-    console.log(entries);
     entries.forEach(entry=>{
         const fullPath = path.join(dir,entry)
+
+        if(isIgnore(fullPath)) return;
         console.log(fullPath);
+        
          if(fs.statSync(fullPath).isFile()){
             calcHash(fullPath)
          }else if(fs.statSync(fullPath).isDirectory()){
-            console.log("是");
-            
-            if(entry === '.mygit' || entry===".git") return;
-
             traverseDir(fullPath)
          }
     })
@@ -201,7 +200,7 @@ function files(dir,filelist) {
     
     entries.forEach(entry=>{
             const fullPath = path.join(dir,entry)
-            
+            if(isIgnore(fullPath)) return;
             if(fs.statSync(fullPath).isFile()){           
                 restoreFile(fullPath,filelist[fullPath])                
             }else if(fs.statSync(fullPath).isDirectory()){
@@ -233,28 +232,94 @@ function status() {
 
 // brach
 function branch() {
-    console.log("branch分支");
-    if (argv[3]) {
-        //  切换
-        if (argv[3] === "check") {
-            if (fs.existsSync(path.join(REFS_DIR, '/heads/' + argv[4]))) {
-                fs.writeFileSync(HEAD_FILE, "ref: refs/heads/" + argv[4])
-                console.log("切换到"+argv[4]+"分支");
-                
-            }
-        } else {
-            const HEAD = fs.readFileSync(HEAD_FILE).toString()
-            const newcommit = fs.readFileSync(path.join(GIT_DIR,HEAD.split(': ')[1])).toString()
-            const branchfile = REFS_DIR + "/heads/" + argv[3];
-            if (fs.existsSync(branchfile)) {
-                console.log("分支已存在");
-            } else {
-                fs.writeFileSync(branchfile, newcommit)
-                console.log("分支" + argv[3] + "创建成功");
-            }
-        }
+    //获取新分支
+    const newHeadRef = path.join(REFS_DIR,'heads',argv[3])
+    //判断新分支存不存在
+    if(!fs.existsSync(newHeadRef)){
+        console.log(`分支${argv[3]}不存在`);
+        return;
     }
 
+    //获取最新commit
+    const currentHeadContent = fs.readFileSync(HEAD_FILE).toString()
+    //当前的分支
+    const currentRefFile = path.join(GIT_DIR,currentHeadContent.split(": ")[1]);
+    //当前最新提交哈希
+    const currentCommitHash = fs.existsSync(currentRefFile) ? fs.readFileSync(currentRefFile).toString() : null
+
+    // 检查工作区脏状态（没有提交的文件）
+    const worklistclear = isWorkListClear(currentCommitHash)
+    if(worklistclear){
+        // 获取目标分支最新commit
+        const newHeadRefHash = fs.readFileSync(newHeadRef).toString()
+        console.log(newHeadRefHash);
+        
+    }
+    
+}
+
+// 检查工作区的函数
+function isWorkListClear(currentCommitHash) {
+    if (!currentCommitHash) {
+        const workFiles = fileList(process.cwd());
+        if (workFiles.length > 0) {
+            console.log("仓库为空但工作区有文件，请先提交");
+            return false;
+        }
+        return true;
+    }
+
+    // 获取提交文件列表
+    const commitFiles = JSON.parse(fs.readFileSync(path.join(OBJECTS_DIR,currentCommitHash)).toString())
+    
+    //获取工作区所有文件
+    const workFiles = fileList(process.cwd())
+    // console.log(workFiles);
+
+    //  判断有没有新增文件
+    for(const item of workFiles){
+        const file = path.relative(process.cwd(),item)
+        if(commitFiles.files[file] === undefined){
+            console.log("有没有提交的文件，先提交");
+            return false;
+        }
+    }
+    //判断是否有被删的文件
+    for(const item of Object.keys(commitFiles.files)){
+        if(!workFiles.includes(path.join(process.cwd(),item))){
+            console.log("工作区有内容没提交，先提交");
+            return false;
+        }
+    }
+    //判断文件是否有被修改
+    for(const item of workFiles){
+        const hash = crypto.createHash('sha1')
+        const workFileContent = fs.readFileSync(item)
+        const workFileHash = hash.update(workFileContent).digest('hex')
+        const xiangduilujing = path.relative(process.cwd(),item)
+        if(workFileHash !== commitFiles.files[xiangduilujing]){
+            console.log("有个文件修改没有提交，先提交一下");
+            return false;
+        }
+    }
+    return true
+    
+}
+
+function fileList(dir) {
+    const entries = fs.readdirSync(dir)
+    let filesList = []
+    entries.forEach(entry=>{
+        const fulPath  = path.join(dir,entry)
+        if(isIgnore(fullPath)) return;
+        if(fs.statSync(fulPath).isFile()){
+            filesList.push(fulPath)
+        }else if(fs.statSync(fulPath).isDirectory()){
+            const subFiles = fileList(fulPath);
+            filesList = filesList.concat(subFiles);
+        }
+    })
+    return filesList;
 }
 
 
@@ -280,4 +345,24 @@ function merge() {
     const targetrefshash = fs.readFileSync(targetrefs).toString()
     fs.writeFileSync(currentrefs,targetrefshash)
     
+}
+
+
+function getIgnoreList(){
+    const defaults = ['.mygit', '.git', 'node_modules', 'dist', 'build', '*.exe', '.cueignore'];
+    try {
+        const userRules = fs.readFileSync('.cueignore').toString().split('\n').map(i=>i.trim()).filter(Boolean);
+        return [...new Set([...defaults,...userRules])];
+    } catch (error) {
+        return defaults
+    }
+}
+
+function isIgnore(fileOrDir){
+    const name = path.basename(fileOrDir);
+    const rules = getIgnoreList();
+    return rules.some(rule=>{
+        if(rule.startsWith('*.')) return fileOrDir.endsWith(rule.slice(1));
+        return name === rule;
+    })
 }
