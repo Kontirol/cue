@@ -2,6 +2,6 @@
   "name": "cue",
   "version": "1.0.0",
   "bin": {
-    "mygit": "mygit.js"
+    "mygit": "cue.js"
   }
 }

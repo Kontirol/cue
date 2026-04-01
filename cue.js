@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const { blob } = require("stream/consumers");
 
 // const GIT_DIR = 
-const GIT_DIR = path.join(process.cwd(), '.mygit');
+const GIT_DIR = path.join(process.cwd(), '.cue');
 const OBJECTS_DIR = path.join(GIT_DIR, 'objects');
 const REFS_DIR = path.join(GIT_DIR, 'refs');
 const HEAD_FILE = path.join(GIT_DIR, 'HEAD');
@@ -33,6 +33,12 @@ switch (argv[2]) {
         break;
     case "merge":
         merge()
+        break;
+    case "clone":
+        clone()
+        break;
+    case "push":
+        push()
         break;
     case "-h":
         help()
@@ -154,6 +160,7 @@ function log() {
     
     if(refshead.length === 0){
         console.log("暂无提交");
+        return;
     }
     let currentHash = refshead
     let commit = []
@@ -285,8 +292,8 @@ function branch() {
             const HashFileContent = fs.readFileSync(path.join(OBJECTS_DIR,commitFiles.files[item])).toString()
             fs.writeFileSync(path.join(process.cwd(),item),HashFileContent);
             fs.writeFileSync(HEAD_FILE,"ref: refs/heads/"+argv[3])
-            console.log(`切换到${argv[3]}分支`);
         }
+            console.log(`切换到${argv[3]}分支`);
     }
     
 }
@@ -442,7 +449,7 @@ function merge() {
 
 
 function getIgnoreList(){
-    const defaults = ['.mygit', '.git', 'node_modules', 'dist', 'build', '*.exe', '.cueignore'];
+    const defaults = ['.cue', '.git', 'node_modules', 'dist', 'build', '*.exe', '.cueignore'];
     try {
         const userRules = fs.readFileSync('.cueignore').toString().split('\n').map(i=>i.trim()).filter(Boolean);
         return [...new Set([...defaults,...userRules])];
@@ -458,4 +465,55 @@ function isIgnore(fileOrDir){
         if(rule.startsWith('*.')) return fileOrDir.endsWith(rule.slice(1));
         return name === rule;
     })
+}
+
+
+function clone() {
+    const targetCue = argv[3]
+    const currentCue = path.join(process.cwd(),'login')
+    console.log(currentCue);
+    try {
+        fs.cpSync(targetCue,currentCue,{recursive:true,force:true,filter:(src)=>true})
+        console.log("克隆成功，记得切换分支");
+    } catch (error) {
+        console.log("保证文件夹空白");
+    }  
+}
+
+function push() {
+    const targetCue = argv[3]
+    const currentCue = process.cwd()
+
+    const currentHead = fs.readFileSync(HEAD_FILE).toString()
+    if(currentHead.split('heads/')[1] === 'main'){
+        console.log('主分支拒绝推送');
+        return;
+    }
+    const currentRefsHash = fs.readFileSync(path.join(GIT_DIR,currentHead.split(': ')[1])).toString()
+    let parent = currentRefsHash
+    let commitFiles = []
+    while(parent !== null){
+        const currentCommit = JSON.parse(fs.readFileSync(path.join(OBJECTS_DIR,parent)).toString())
+        Object.keys(currentCommit.files).forEach(item=>{
+            const file = path.join(OBJECTS_DIR,currentCommit.files[item])
+            const target = path.join(targetCue,'.cue/objects/'+currentCommit.files[item]);
+            if (fs.existsSync(target)) return;
+            fs.cpSync(file,target,{recursive:true,force:true,filter:(src)=>true})
+        })
+        commitFiles.push(parent)
+        parent = currentCommit.parent
+    }
+    
+    commitFiles.forEach(item=>{
+        const file = path.join(OBJECTS_DIR,item)
+        const target = path.join(targetCue,'.cue/objects/'+item);
+        if (fs.existsSync(target)) return;
+        fs.cpSync(file,target,{recursive:true,force:true,filter:(src)=>true})
+    })
+
+    const currentRefs = currentHead.split(': ')[1]
+    const targetRef = path.join(targetCue,'.cue/'+currentRefs)
+    fs.mkdirSync(path.dirname(targetRef), { recursive: true });
+    fs.writeFileSync(targetRef, currentRefsHash);
+    
 }
