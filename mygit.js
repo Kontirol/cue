@@ -373,11 +373,71 @@ function help() {
 
 // merge 合并
 function merge() {
-    const currentrefs = path.join(GIT_DIR,fs.readFileSync(HEAD_FILE).toString().split(': ')[1])
-    const targetrefs = path.join(REFS_DIR,"/heads/"+argv[3])
-    const targetrefshash = fs.readFileSync(targetrefs).toString()
-    fs.writeFileSync(currentrefs,targetrefshash)
-    
+    //检查当前分支
+    const currentRefs = fs.readFileSync(HEAD_FILE).toString()
+    if (currentRefs.split("heads/")[1] === argv[3]) {
+        console.log("请先切换到其他分支再合并");
+        return;
+    }
+
+    // 检查工作区有没有干净
+    //获取最新commit
+    const currentHeadContent = fs.readFileSync(HEAD_FILE).toString()
+    //当前的分支
+    const currentRefFile = path.join(GIT_DIR, currentHeadContent.split(": ")[1]);
+    //当前最新提交哈希
+    const currentCommitHash = fs.existsSync(currentRefFile) ? fs.readFileSync(currentRefFile).toString() : null
+    const worklistclear = isWorkListClear(currentCommitHash)
+
+    if (worklistclear) {
+        const targetRefs = path.join(REFS_DIR, 'heads', argv[3])
+        if (!fs.existsSync(targetRefs)) {
+            console.log("分支不存在");
+            return
+        } else {
+            const targetCommitHash = fs.readFileSync(path.join(REFS_DIR, 'heads', argv[3])).toString()
+            const targetCommitFiles = JSON.parse(fs.readFileSync(path.join(OBJECTS_DIR, targetCommitHash)).toString())
+            for (const item of Object.keys(targetCommitFiles.files)) {
+                const targetFilesContent = fs.readFileSync(path.join(OBJECTS_DIR, targetCommitFiles.files[item])).toString()
+                console.log(targetFilesContent);
+                fs.writeFileSync(path.join(process.cwd(), item), targetFilesContent)
+                const dir = process.cwd()
+                traverseDir(dir)
+
+                // 提交分支
+                //  检查暂存区
+                const index = fs.readFileSync(GIT_DIR + '/index').toString()
+                const files = index.split('\n').filter(Boolean);
+                let filemap = {}
+                files.forEach(item => {
+                    filemap[item.split(' ')[0]] = item.split(' ')[1]
+                })
+                const HEAD = fs.readFileSync(HEAD_FILE).toString()
+                const refshead = fs.readFileSync(path.join(GIT_DIR, HEAD.split(': ')[1])).toString()
+                let parent
+                if (refshead.length === 0) {
+                    parent = null
+                } else {
+                    parent = refshead
+                }
+
+                let object
+                object = {
+                    files: filemap,
+                    message: "合并分支"+argv[3],
+                    time: new Date().toISOString(),
+                    parent: parent
+                }
+                const str = JSON.stringify(object)
+                const hashvalue = crypto.createHash('sha1').update(str).digest('hex')
+                fs.writeFileSync(OBJECTS_DIR + '/' + hashvalue, str)
+                fs.writeFileSync(GIT_DIR + '/index', "")
+                fs.writeFileSync(path.join(GIT_DIR, HEAD.split(': ')[1]), hashvalue)
+
+            }
+        }
+    }
+
 }
 
 
