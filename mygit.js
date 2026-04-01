@@ -234,6 +234,20 @@ function status() {
 
 // brach
 function branch() {
+    //如果是删除
+    if(argv[3] === '-d'){
+        //检查当前分支
+        const currentRefs = fs.readFileSync(HEAD_FILE).toString()
+        if(currentRefs.split("heads/")[1] === argv[4]){
+            console.log("请先切换到其他分支再删除该分支");
+        }else{
+            if(!fs.existsSync(path.join(REFS_DIR,'heads',argv[4]))) return;
+            fs.unlinkSync(path.join(REFS_DIR,'heads',argv[4]))
+            console.log(`${argv[4]}分支删除成功`);
+        }
+        return;
+    }
+
     //获取新分支
     const newHeadRef = path.join(REFS_DIR,'heads',argv[3])
     //判断新分支存不存在
