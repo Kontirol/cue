@@ -9,6 +9,7 @@ const GIT_DIR = path.join(process.cwd(), '.mygit');
 const OBJECTS_DIR = path.join(GIT_DIR, 'objects');
 const REFS_DIR = path.join(GIT_DIR, 'refs');
 const HEAD_FILE = path.join(GIT_DIR, 'HEAD');
+const INDEX_FILE = path.join(GIT_DIR, 'index');
 
 const argv = process.argv
 switch (argv[2]) {
@@ -52,6 +53,7 @@ function init() {
         fs.mkdirSync(REFS_DIR+"/heads/", { recursive: true })
         fs.writeFileSync(REFS_DIR+"/heads/main","")
         fs.writeFileSync(HEAD_FILE, "ref: refs/heads/main")
+        fs.writeFileSync(INDEX_FILE,"")
         console.log("仓库初始化成功");
     }
 }
@@ -236,7 +238,13 @@ function branch() {
     const newHeadRef = path.join(REFS_DIR,'heads',argv[3])
     //判断新分支存不存在
     if(!fs.existsSync(newHeadRef)){
-        console.log(`分支${argv[3]}不存在`);
+        const currentHeadContent =  fs.readFileSync(HEAD_FILE).toString()
+        const currentRefFile = path.join(GIT_DIR,currentHeadContent.split(': ')[1]);
+        const currentCommitHash = fs.existsSync(currentRefFile) ? fs.readFileSync(currentRefFile).toString() : null;
+        fs.writeFileSync(newHeadRef,currentCommitHash || '')
+
+        fs.writeFileSync(HEAD_FILE,"ref: refs/heads/"+argv[3])
+        console.log(`分支 ${argv[3]} 已创建并切换`);
         return;
     }
 
@@ -252,8 +260,19 @@ function branch() {
     if(worklistclear){
         // 获取目标分支最新commit
         const newHeadRefHash = fs.readFileSync(newHeadRef).toString()
-        console.log(newHeadRefHash);
-        
+        const files =  fileList(process.cwd())
+        files.forEach(item=>{
+            console.log(item);
+            fs.unlinkSync(item)
+        })
+
+        const commitFiles = JSON.parse(fs.readFileSync(path.join(OBJECTS_DIR,newHeadRefHash)).toString())
+        for(const item of Object.keys(commitFiles.files)){
+            const HashFileContent = fs.readFileSync(path.join(OBJECTS_DIR,commitFiles.files[item])).toString()
+            fs.writeFileSync(path.join(process.cwd(),item),HashFileContent);
+            fs.writeFileSync(HEAD_FILE,"ref: refs/heads/"+argv[3])
+            console.log(`切换到${argv[3]}分支`);
+        }
     }
     
 }
@@ -287,7 +306,7 @@ function isWorkListClear(currentCommitHash) {
     //判断是否有被删的文件
     for(const item of Object.keys(commitFiles.files)){
         if(!workFiles.includes(path.join(process.cwd(),item))){
-            console.log("工作区有内容没提交，先提交");
+            console.log("工作区有内容没提交，先提交"+item);
             return false;
         }
     }
@@ -311,7 +330,7 @@ function fileList(dir) {
     let filesList = []
     entries.forEach(entry=>{
         const fulPath  = path.join(dir,entry)
-        if(isIgnore(fullPath)) return;
+        if(isIgnore(fulPath)) return;
         if(fs.statSync(fulPath).isFile()){
             filesList.push(fulPath)
         }else if(fs.statSync(fulPath).isDirectory()){
