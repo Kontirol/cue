@@ -470,7 +470,7 @@ function isIgnore(fileOrDir){
 
 function clone() {
     const targetCue = argv[3]
-    const currentCue = path.join(process.cwd(),'login')
+    const currentCue = path.join(process.cwd())
     console.log(currentCue);
     try {
         fs.cpSync(targetCue,currentCue,{recursive:true,force:true,filter:(src)=>true})
