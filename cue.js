@@ -446,6 +446,8 @@ function switchBranch() {
         return;
     }
 
+
+    
     const targetCommit = readCommit(targetCommitHash);
     const currentCommitHash = getCurrentCommitHash();
     const currentCommit = currentCommitHash ? readCommit(currentCommitHash) : { files: {} };
